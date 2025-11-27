@@ -3,6 +3,8 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import warnings
+import requests
+from io import StringIO
 
 warnings.filterwarnings('ignore')
 
@@ -41,9 +43,11 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-# ------------------------- Load Data from Dropbox -------------------------
+# ------------------------- Load Data from Dropbox (FIXED) -------------------------
 dropbox_url = "https://www.dropbox.com/scl/fi/wx0fsu580mfl0kjcaub2f/cleaned_reviews.csv?rlkey=bu103t7xhiwwgr78f63uh0b3w&dl=1"
-df = pd.read_csv(dropbox_url)
+
+response = requests.get(dropbox_url)
+df = pd.read_csv(StringIO(response.text), on_bad_lines="skip", encoding="utf-8")
 
 # Convert Time to datetime & extract Year, Month, Day
 df['Time'] = pd.to_datetime(df['Time'])
@@ -97,9 +101,8 @@ with col3:
 st.markdown('<hr class="custom-hr">', unsafe_allow_html=True)
 
 # ------------------------- Sentiment Trend & Donuts for Diverse Users -------------------------
-col1, col2 = st.columns([2, 1])  
+col1, col2 = st.columns([2, 1])
 
-# ---------- Line Chart: Sentiment Trend for Diverse Users ----------
 with col1:
     diverse_filtered = filtered_df[filtered_df['Behavior'] == 'Diverse']
 
@@ -139,12 +142,11 @@ with col1:
         )
         fig_diverse.update_traces(line=dict(width=2), marker=dict(size=6))
         fig_diverse.update_yaxes(range=[0, 1])
-        fig_diverse.update_xaxes(dtick=1)  
+        fig_diverse.update_xaxes(dtick=1)
         fig_diverse.update_layout(height=350, margin=dict(l=10,r=10,t=10,b=10))
 
         st.plotly_chart(fig_diverse, use_container_width=True)
 
-# ---------- Donut Charts: Sentiment & Behavior ----------
 with col2:
     st.markdown(
         "<h3 style='text-align: center; font-size: 20px; font-family: \"Courier New\", Times, serif;'>Customer Sentiment</h3>",
@@ -190,33 +192,25 @@ def format_title(title, max_words_per_line=5):
     lines = [' '.join(words[i:i+max_words_per_line]) for i in range(0,len(words),max_words_per_line)]
     return '<br>'.join(lines)
 
-# ------- Calculate number of reviews and average score per product -------
 product_stats = filtered_df.groupby('ProductId').agg(
     num_reviews=('Score','count'),
     avg_score=('Score','mean')
 ).reset_index()
 
-# ------- Normalize to prepare for Joint Metric -------
 product_stats['norm_reviews'] = (product_stats['num_reviews'] - product_stats['num_reviews'].min()) / (product_stats['num_reviews'].max() - product_stats['num_reviews'].min())
 product_stats['norm_avg_score'] = (product_stats['avg_score'] - product_stats['avg_score'].min()) / (product_stats['avg_score'].max() - product_stats['avg_score'].min())
 
-# ------- Adjust joint metric to handle identical avg_score -------
 if product_stats['avg_score'].nunique() == 1:
-    # All avg_scores are the same, weight more on number of reviews
     product_stats['joint_metric'] = product_stats['norm_reviews'] * 2  
 else:
-    # Normal joint metric
     product_stats['joint_metric'] = product_stats['norm_reviews'] + product_stats['norm_avg_score']
 
-# ------- Top & Bottom Products -------
 top_products = product_stats.sort_values('joint_metric', ascending=False).head(10)
 bottom_products = product_stats.sort_values('joint_metric', ascending=True).head(10)
 
-# ------- Format Titles -------
 top_products['formatted'] = top_products['ProductId'].apply(format_title)
 bottom_products['formatted'] = bottom_products['ProductId'].apply(format_title)
 
-# ------- Plot Bar Charts -------
 col1, col2 = st.columns(2)
 
 with col1:
@@ -314,4 +308,3 @@ with col2:
     fig_scatter.update_traces(marker=dict(size=6, opacity=0.6))
     fig_scatter.update_layout(height=350, margin=dict(l=40, r=20, t=20, b=40))
     st.plotly_chart(fig_scatter, use_container_width=True)
-
