@@ -42,7 +42,9 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ------------------------- Load Data -------------------------
-df = pd.read_csv("cleaned_reviews.csv")
+# Dropbox direct download link
+url = "https://www.dropbox.com/scl/fi/wx0fsu580mfl0kjcaub2f/cleaned_reviews.csv?dl=1"
+df = pd.read_csv(url)
 
 # Convert Time to datetime & extract Year, Month, Day
 df['Time'] = pd.to_datetime(df['Time'])
