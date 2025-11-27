@@ -6,10 +6,9 @@ url = "https://www.dropbox.com/scl/fi/wx0fsu580mfl0kjcaub2f/cleaned_reviews.csv?
 try:
     df = pd.read_csv(
         url,
-        engine='python',      # محرك أكثر مرونة
-        quotechar='"',        # للتعامل مع علامات الاقتباس
-        error_bad_lines=False, # تجاهل الصفوف المشكلة
-        warn_bad_lines=True    # طباعة تحذير للصفوف اللي تم تجاهلها
+        engine='python',       # محرك أكثر مرونة للتعامل مع المشاكل
+        quotechar='"',         # للتعامل مع علامات الاقتباس
+        on_bad_lines='skip'    # تجاهل الصفوف المشكلة
     )
     st.write("أسماء الأعمدة في الملف:")
     st.write(df.columns.tolist())
