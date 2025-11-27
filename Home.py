@@ -3,8 +3,6 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import warnings
-import requests
-from io import StringIO
 
 warnings.filterwarnings('ignore')
 
@@ -43,11 +41,9 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-# ------------------------- Load Data from Dropbox (FIXED) -------------------------
-dropbox_url = "https://www.dropbox.com/scl/fi/wx0fsu580mfl0kjcaub2f/cleaned_reviews.csv?rlkey=bu103t7xhiwwgr78f63uh0b3w&dl=1"
+# ------------------------- Load Data -------------------------
+df = pd.read_csv("https://www.dropbox.com/scl/fi/wx0fsu580mfl0kjcaub2f/cleaned_reviews.csv?rlkey=bu103t7xhiwwgr78f63uh0b3w&st=cgr3rhbe&dl=1")
 
-response = requests.get(dropbox_url)
-df = pd.read_csv(StringIO(response.text), on_bad_lines="skip", encoding="utf-8")
 
 # Convert Time to datetime & extract Year, Month, Day
 df['Time'] = pd.to_datetime(df['Time'])
@@ -101,8 +97,9 @@ with col3:
 st.markdown('<hr class="custom-hr">', unsafe_allow_html=True)
 
 # ------------------------- Sentiment Trend & Donuts for Diverse Users -------------------------
-col1, col2 = st.columns([2, 1])
+col1, col2 = st.columns([2, 1])  
 
+# ---------- Line Chart: Sentiment Trend for Diverse Users ----------
 with col1:
     diverse_filtered = filtered_df[filtered_df['Behavior'] == 'Diverse']
 
@@ -118,42 +115,54 @@ with col1:
             .reset_index()
         )
 
-        yearly_sentiment['Year'] = yearly_sentiment['Year'].astype(int)
+    yearly_sentiment['Year'] = yearly_sentiment['Year'].astype(int)
 
-        y_columns = [
-            col for col in ['positive','negative','neutral']
-            if col in yearly_sentiment.columns and yearly_sentiment[col].sum() > 0
-        ]
+    y_columns = [
+        col for col in ['positive','negative','neutral']
+        if col in yearly_sentiment.columns and yearly_sentiment[col].sum() > 0
+    ]
 
-        st.markdown(
-            "<h3 style='text-align:center;font-size:20px;font-family:\"Courier New\";'>Sentiment Trend of Diverse Users Over Years</h3>",
-            unsafe_allow_html=True
-        )
+    st.markdown(
+        "<h3 style='text-align:center;font-size:20px;font-family:\"Courier New\";'>Sentiment Trend of Diverse Users Over Years</h3>",
+        unsafe_allow_html=True
+    )
 
-        sentiment_colors = {'positive': '#674FEE','negative': 'red','neutral': 'gray'}
+    # Define custom colors
+    sentiment_colors = {
+        'positive': '#674FEE',   
+        'negative': 'red',
+        'neutral': 'gray'     
+    }
 
-        fig_diverse = px.line(
-            yearly_sentiment,
-            x='Year',
-            y=y_columns,
-            markers=True,
-            labels={'value':'Fraction of Reviews','variable':'Sentiment'},
-            color_discrete_map=sentiment_colors
-        )
-        fig_diverse.update_traces(line=dict(width=2), marker=dict(size=6))
-        fig_diverse.update_yaxes(range=[0, 1])
-        fig_diverse.update_xaxes(dtick=1)
-        fig_diverse.update_layout(height=350, margin=dict(l=10,r=10,t=10,b=10))
+    fig_diverse = px.line(
+        yearly_sentiment,
+        x='Year',
+        y=y_columns,
+        markers=True,
+        labels={'value':'Fraction of Reviews','variable':'Sentiment'},
+        color_discrete_map=sentiment_colors
+    )
+    fig_diverse.update_traces(line=dict(width=2), marker=dict(size=6))
+    fig_diverse.update_yaxes(range=[0, 1])
+    fig_diverse.update_xaxes(dtick=1)  
+    fig_diverse.update_layout(height=350, margin=dict(l=10,r=10,t=10,b=10))
 
-        st.plotly_chart(fig_diverse, use_container_width=True)
+    st.plotly_chart(fig_diverse, use_container_width=True)
 
+
+# ---------- Donut Charts: Sentiment & Behavior ----------
 with col2:
+    # Donut: Sentiment
     st.markdown(
         "<h3 style='text-align: center; font-size: 20px; font-family: \"Courier New\", Times, serif;'>Customer Sentiment</h3>",
         unsafe_allow_html=True
     )
     sentiment_counts = filtered_df['Sentiment'].value_counts()
-    sentiment_colors = {'positive': '#674FEE','negative': "#C50101",'neutral': "#A5A8A8"}
+    sentiment_colors = {
+        'positive': '#674FEE',  
+        'negative': "#C50101",
+        'neutral': "#A5A8A8"
+    }
     fig_sentiment = px.pie(
         values=sentiment_counts.values,
         names=sentiment_counts.index,
@@ -165,6 +174,7 @@ with col2:
     fig_sentiment.update_layout(height=130, margin=dict(l=5,r=5,t=6,b=5))
     st.plotly_chart(fig_sentiment, use_container_width=True, key="sentiment_donut")
 
+    # Donut: Behavior
     st.markdown(
         "<h3 style='text-align: center; font-size: 20px; font-family: \"Courier New\", Times, serif;'>Customer Behavior</h3>",
         unsafe_allow_html=True
@@ -192,25 +202,33 @@ def format_title(title, max_words_per_line=5):
     lines = [' '.join(words[i:i+max_words_per_line]) for i in range(0,len(words),max_words_per_line)]
     return '<br>'.join(lines)
 
+# ------- Calculate number of reviews and average score per product -------
 product_stats = filtered_df.groupby('ProductId').agg(
     num_reviews=('Score','count'),
     avg_score=('Score','mean')
 ).reset_index()
 
+# ------- Normalize to prepare for Joint Metric -------
 product_stats['norm_reviews'] = (product_stats['num_reviews'] - product_stats['num_reviews'].min()) / (product_stats['num_reviews'].max() - product_stats['num_reviews'].min())
 product_stats['norm_avg_score'] = (product_stats['avg_score'] - product_stats['avg_score'].min()) / (product_stats['avg_score'].max() - product_stats['avg_score'].min())
 
+# ------- Adjust joint metric to handle identical avg_score -------
 if product_stats['avg_score'].nunique() == 1:
+    # All avg_scores are the same, weight more on number of reviews
     product_stats['joint_metric'] = product_stats['norm_reviews'] * 2  
 else:
+    # Normal joint metric
     product_stats['joint_metric'] = product_stats['norm_reviews'] + product_stats['norm_avg_score']
 
+# ------- Top & Bottom Products -------
 top_products = product_stats.sort_values('joint_metric', ascending=False).head(10)
 bottom_products = product_stats.sort_values('joint_metric', ascending=True).head(10)
 
+# ------- Format Titles -------
 top_products['formatted'] = top_products['ProductId'].apply(format_title)
 bottom_products['formatted'] = bottom_products['ProductId'].apply(format_title)
 
+# ------- Plot Bar Charts -------
 col1, col2 = st.columns(2)
 
 with col1:
